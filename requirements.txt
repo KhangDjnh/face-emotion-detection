@@ -1,0 +1,13 @@
+mediapipe==0.10.21
+opencv-python>=4.7.0
+numpy>=1.24
+pillow
+scipy
+torch          # install via official command if you need specific cuda/cpu package
+torchvision
+matplotlib
+tqdm
+pandas
+scikit-learn
+tensorboard   # optional for training logs
+onnxruntime   # optional for deployment/fast inference
