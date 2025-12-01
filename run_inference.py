@@ -6,6 +6,12 @@ Usage:
     python run_inference.py video.mp4 output.json  # Video file với output JSON
 """
 import sys
+from pathlib import Path
+
+# Add project root to Python path
+project_root = Path(__file__).resolve().parent
+sys.path.insert(0, str(project_root))
+
 from src.inference.pipeline import run_realtime_inference
 
 if __name__ == "__main__":

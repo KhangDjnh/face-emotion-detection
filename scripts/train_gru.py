@@ -2,10 +2,16 @@
 Training script cho Temporal GRU model.
 Train trên sequences đã được prepare từ videos.
 """
+import sys
+from pathlib import Path
+
+# Add project root to Python path
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))
+
 import torch
 import numpy as np
 from torch.utils.data import DataLoader, TensorDataset
-from pathlib import Path
 from sklearn.model_selection import train_test_split
 
 from src.config import (
@@ -16,9 +22,11 @@ from src.models.temporal_gru import TemporalGRU
 from src.models.trainer import Trainer
 
 def main():
-    print("[INFO] Starting GRU training...")
+    print("\n" + "="*80)
+    print(" " * 25 + "TEMPORAL GRU TRAINING")
+    print("="*80 + "\n")
     
-    # Load sequences và labels
+    print("[STEP 1/6] Loading sequences and labels...")
     sequences_dir = PROCESSED_DIR / "sequences"
     sequences_file = sequences_dir / "sequences.npy"
     labels_file = sequences_dir / "labels.npy"
@@ -31,31 +39,38 @@ def main():
     sequences = np.load(sequences_file)  # (num_sequences, seq_len, EMB_DIM)
     labels = np.load(labels_file)  # (num_sequences,)
     
-    print(f"[INFO] Loaded {len(sequences)} sequences")
-    print(f"[INFO] Sequences shape: {sequences.shape}")
-    print(f"[INFO] Labels distribution: Focus={np.sum(labels)}, Unfocus={len(labels)-np.sum(labels)}")
+    print(f"  ✓ Loaded {len(sequences)} sequences")
+    print(f"  ✓ Sequences shape: {sequences.shape}")
+    print(f"  ✓ Sequence length: {SEQ_LEN} frames")
+    print(f"  ✓ Embedding dimension: {EMB_DIM}")
+    focus_count = np.sum(labels)
+    unfocus_count = len(labels) - focus_count
+    print(f"  ✓ Labels distribution: Focus={focus_count} ({focus_count/len(labels)*100:.1f}%), Unfocus={unfocus_count} ({unfocus_count/len(labels)*100:.1f}%)")
     
-    # Split train/val
+    print("\n[STEP 2/6] Splitting train/validation sets...")
     X_train, X_val, y_train, y_val = train_test_split(
         sequences, labels,
         test_size=0.2,
         random_state=42,
         stratify=labels
     )
+    print(f"  ✓ Train sequences: {len(X_train)}")
+    print(f"  ✓ Val sequences: {len(X_val)}")
+    print(f"  ✓ Train split: {len(X_train)/len(sequences)*100:.1f}%")
+    print(f"  ✓ Val split: {len(X_val)/len(sequences)*100:.1f}%")
     
-    print(f"[INFO] Train: {len(X_train)}, Val: {len(X_val)}")
-    
-    # Convert to tensors
+    print("\n[STEP 3/6] Converting to tensors...")
     X_train_tensor = torch.tensor(X_train, dtype=torch.float32)
     y_train_tensor = torch.tensor(y_train, dtype=torch.long)
     X_val_tensor = torch.tensor(X_val, dtype=torch.float32)
     y_val_tensor = torch.tensor(y_val, dtype=torch.long)
+    print(f"  ✓ Train tensor shape: {X_train_tensor.shape}")
+    print(f"  ✓ Val tensor shape: {X_val_tensor.shape}")
     
-    # Create datasets
+    print("\n[STEP 4/6] Creating datasets and data loaders...")
     train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
     val_dataset = TensorDataset(X_val_tensor, y_val_tensor)
     
-    # Create data loaders
     train_loader = DataLoader(
         train_dataset,
         batch_size=BATCH_SIZE,
@@ -71,8 +86,10 @@ def main():
         num_workers=NUM_WORKERS,
         pin_memory=True if DEVICE == "cuda" else False
     )
+    print(f"  ✓ Train batches: {len(train_loader)}")
+    print(f"  ✓ Val batches: {len(val_loader)}")
     
-    # Create model
+    print("\n[STEP 5/6] Creating model...")
     model = TemporalGRU(
         input_dim=EMB_DIM,
         hidden_dim=128,
@@ -80,10 +97,18 @@ def main():
         output_dim=GRU_OUTPUT_DIM,
         dropout=0.3
     )
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"  ✓ Model: Temporal GRU")
+    print(f"  ✓ Input dimension: {EMB_DIM}")
+    print(f"  ✓ Hidden dimension: 128")
+    print(f"  ✓ Number of layers: 2")
+    print(f"  ✓ Dropout: 0.3")
+    print(f"  ✓ Output classes: {GRU_OUTPUT_DIM} (Focus/Unfocus)")
+    print(f"  ✓ Total parameters: {total_params:,}")
+    print(f"  ✓ Trainable parameters: {trainable_params:,}")
     
-    print(f"[INFO] Model created with {sum(p.numel() for p in model.parameters()):,} parameters")
-    
-    # Create trainer
+    print("\n[STEP 6/6] Initializing trainer...")
     trainer = Trainer(
         model=model,
         train_loader=train_loader,
@@ -94,6 +119,16 @@ def main():
         checkpoint_dir=str(CHECKPOINTS_DIR),
         early_stop_patience=10
     )
+    print(f"  ✓ Learning rate: {LR}")
+    print(f"  ✓ Weight decay: {WEIGHT_DECAY}")
+    print(f"  ✓ Batch size: {BATCH_SIZE}")
+    print(f"  ✓ Epochs: {EPOCHS}")
+    print(f"  ✓ Early stop patience: 10")
+    print(f"  ✓ Checkpoint directory: {CHECKPOINTS_DIR}")
+    
+    print("\n" + "="*80)
+    print("Starting training...")
+    print("="*80 + "\n")
     
     # Train
     trainer.train(
@@ -103,7 +138,9 @@ def main():
         resume_from_checkpoint=None
     )
     
-    print("[INFO] Training completed!")
+    print("\n" + "="*80)
+    print(" " * 30 + "TRAINING COMPLETED!")
+    print("="*80 + "\n")
 
 if __name__ == "__main__":
     main()

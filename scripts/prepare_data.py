@@ -2,10 +2,16 @@
 Prepare data từ videos: extract frames, detect faces, extract landmarks và embeddings.
 Tạo sequences cho GRU training.
 """
+import sys
+from pathlib import Path
+
+# Add project root to Python path
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))
+
 import cv2
 import numpy as np
 import torch
-from pathlib import Path
 from tqdm import tqdm
 from torchvision import transforms
 from PIL import Image
@@ -120,17 +126,23 @@ def main():
     
     resnet_checkpoint = CHECKPOINTS_DIR / "resnet_emotion_best.pth"
     if resnet_checkpoint.exists():
-        checkpoint = torch.load(resnet_checkpoint, map_location=DEVICE)
-        # Handle both dict format and state_dict format
-        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
-            resnet_model.load_state_dict(checkpoint['model_state_dict'])
-        else:
-            resnet_model.load_state_dict(checkpoint)
-        print(f"[INFO] Loaded ResNet from {resnet_checkpoint}")
+        try:
+            checkpoint = torch.load(resnet_checkpoint, map_location=DEVICE)
+            # Handle both dict format and state_dict format
+            if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+                resnet_model.load_state_dict(checkpoint['model_state_dict'])
+            else:
+                resnet_model.load_state_dict(checkpoint)
+            print(f"[INFO] Loaded trained ResNet from {resnet_checkpoint}")
+        except Exception as e:
+            print(f"[WARNING] Error loading checkpoint: {e}")
+            print("[WARNING] Using pretrained ResNet backbone (not fine-tuned on emotions)")
+            print("[WARNING] For better results, train ResNet first using: python scripts/train_resnet.py")
     else:
         print(f"[WARNING] ResNet checkpoint not found at {resnet_checkpoint}")
-        print("[WARNING] Please train ResNet first using train_resnet.py")
-        return
+        print("[WARNING] Using pretrained ResNet backbone (not fine-tuned on emotions)")
+        print("[WARNING] For better results, train ResNet first using: python scripts/train_resnet.py")
+        print("[INFO] Continuing with pretrained model...")
     
     resnet_model.to(DEVICE).eval()
     
@@ -143,6 +155,11 @@ def main():
     output_dir = PROCESSED_DIR / "sequences"
     output_dir.mkdir(parents=True, exist_ok=True)
     
+    if not video_dir.exists():
+        print(f"[ERROR] Video directory not found: {video_dir}")
+        print("[INFO] Please ensure videos are in data/raw/videos/focus/ and data/raw/videos/unfocus/")
+        return
+    
     all_sequences = []
     all_labels = []
     
@@ -150,30 +167,44 @@ def main():
     focus_dir = video_dir / "focus"
     if focus_dir.exists():
         focus_videos = list(focus_dir.glob("*.mp4"))
-        print(f"[INFO] Processing {len(focus_videos)} focus videos...")
-        
-        for video_path in tqdm(focus_videos, desc="Focus videos"):
-            embeddings = process_video(video_path, face_detector, face_mesh, resnet_model, label=1)
-            if len(embeddings) > 0:
-                sequences = create_sequences(embeddings, SEQ_LEN)
-                all_sequences.extend(sequences)
-                all_labels.extend([1] * len(sequences))  # 1 = focus
+        print(f"[INFO] Found {len(focus_videos)} focus videos")
+        if len(focus_videos) > 0:
+            print(f"[INFO] Processing focus videos...")
+            for video_path in tqdm(focus_videos, desc="Focus videos"):
+                embeddings = process_video(video_path, face_detector, face_mesh, resnet_model, label=1)
+                if len(embeddings) > 0:
+                    sequences = create_sequences(embeddings, SEQ_LEN)
+                    all_sequences.extend(sequences)
+                    all_labels.extend([1] * len(sequences))  # 1 = focus
+        else:
+            print(f"[WARNING] No .mp4 files found in {focus_dir}")
+    else:
+        print(f"[WARNING] Focus directory not found: {focus_dir}")
     
     # Process unfocus videos (label = 0)
     unfocus_dir = video_dir / "unfocus"
     if unfocus_dir.exists():
         unfocus_videos = list(unfocus_dir.glob("*.mp4"))
-        print(f"[INFO] Processing {len(unfocus_videos)} unfocus videos...")
-        
-        for video_path in tqdm(unfocus_videos, desc="Unfocus videos"):
-            embeddings = process_video(video_path, face_detector, face_mesh, resnet_model, label=0)
-            if len(embeddings) > 0:
-                sequences = create_sequences(embeddings, SEQ_LEN)
-                all_sequences.extend(sequences)
-                all_labels.extend([0] * len(sequences))  # 0 = unfocus
+        print(f"[INFO] Found {len(unfocus_videos)} unfocus videos")
+        if len(unfocus_videos) > 0:
+            print(f"[INFO] Processing unfocus videos...")
+            for video_path in tqdm(unfocus_videos, desc="Unfocus videos"):
+                embeddings = process_video(video_path, face_detector, face_mesh, resnet_model, label=0)
+                if len(embeddings) > 0:
+                    sequences = create_sequences(embeddings, SEQ_LEN)
+                    all_sequences.extend(sequences)
+                    all_labels.extend([0] * len(sequences))  # 0 = unfocus
+        else:
+            print(f"[WARNING] No .mp4 files found in {unfocus_dir}")
+    else:
+        print(f"[WARNING] Unfocus directory not found: {unfocus_dir}")
     
     if len(all_sequences) == 0:
         print("[ERROR] No sequences created!")
+        print("[INFO] Possible reasons:")
+        print("  1. No videos found in data/raw/videos/focus/ or data/raw/videos/unfocus/")
+        print("  2. Videos don't contain detectable faces")
+        print("  3. Videos are corrupted or in unsupported format")
         return
     
     # Save sequences
