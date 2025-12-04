@@ -152,14 +152,36 @@ def main():
     print("\n" + "="*80)
     print("Starting training...")
     print("="*80 + "\n")
+
+    # --- ĐOẠN CẦN SỬA Ở ĐÂY ---
     
-    # Train
+    # 1. Xác định đường dẫn file epoch 11
+    # Lưu ý: CHECKPOINTS_DIR đã được định nghĩa trong src.config
+    checkpoint_path = CHECKPOINTS_DIR / "resnet_emotion_resnet_epoch11.pth"
+    
+    # Kiểm tra xem file có tồn tại không cho chắc chắn
+    if checkpoint_path.exists():
+        print(f"[INFO] Resuming training from: {checkpoint_path}")
+        resume_path = str(checkpoint_path)
+    else:
+        print(f"[WARNING] Checkpoint not found at {checkpoint_path}. Training from scratch.")
+        resume_path = None
+
+    # 2. Truyền vào hàm train
     trainer.train(
-        num_epochs=EPOCHS,
+        num_epochs=EPOCHS,             # Tổng số epoch (ví dụ 30)
         stage="resnet",
         save_name="resnet_emotion",
-        resume_from_checkpoint=None
+        resume_from_checkpoint=resume_path  # <--- Thay đổi chính là ở đây (thay vì None)
     )
+    
+    # # Train
+    # trainer.train(
+    #     num_epochs=EPOCHS,
+    #     stage="resnet",
+    #     save_name="resnet_emotion",
+    #     resume_from_checkpoint=None
+    # )
     
     print("\n" + "="*80)
     print(" " * 30 + "TRAINING COMPLETED!")
